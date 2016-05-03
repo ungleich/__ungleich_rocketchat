@@ -1,0 +1,61 @@
+#!/bin/sh
+
+os=$(cat "$__global/explorer/os")
+if [ ! "$os" = "debian" ]
+then
+    echo "OS $os is currently not supported." >&2
+    exit 1
+fi
+os_version=$(cat "$__global/explorer/os_version")
+case "$os_version" in
+    8*)
+        :
+    ;;
+    *)
+        echo "Unsupported version $os_version of $os." >&2
+        exit 1
+    ;;
+esac
+echo "rm -f /etc/nginx/sites-enabled/default"
+echo "service nginx reload"
+rocketchat_dir="/$__object_id"
+if [ ! "$rocketchat_dir" ]
+then
+    echo "Missing rocketchat directory (object_id)." >&2
+    exit 1
+fi
+state=$(cat "$__object/parameter/state")
+exists=$(cat "$__object/explorer/exists")
+
+case "$state" in
+    present)
+        [ "$exists" = "yes" ] && exit 0
+
+        rocketchat_uri=$(cat "$__object/parameter/rocketchat-uri")
+        if [ ! "$rocketchat_uri" ]
+        then
+            rocketchat_version=$(cat "$__object/parameter/rocketchat-version")
+            rocketchat_uri="https://rocket.chat/releases/${rocketchat-version}/download"
+        fi
+        cat <<eof
+service mongod start
+curl -s -L ${rocketchat_uri} -o ${rocketchat_dir}/rocket.chat.tar.gz
+tar -x -z -C ${rocketchat_dir} -f ${rocketchat_dir}/rocket.chat.tar.gz
+rm ${rocketchat_dir}/rocket.chat.tar.gz
+cp -R -p ${rocketchat_dir}/bundle/* ${rocketchat_dir}
+cp -R -p ${rocketchat_dir}/bundle/.* ${rocketchat_dir} || true
+rm -r ${rocketchat_dir}/bundle
+cd ${rocketchat_dir}/programs/server
+npm install
+cd \$OLD_PWD
+service rocketchat start
+eof
+    ;;
+    absent)
+        # all done in manifest
+        :
+    ;;
+    *)
+        echo "Unknown state: $state" >&2
+        exit 1
+esac

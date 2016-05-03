@@ -1,0 +1,5 @@
+#!/bin/sh
+
+rocketchat_dir="/$__object_id"
+
+[ -e "$rocketchat_dir" ] && echo "yes" || echo "no"

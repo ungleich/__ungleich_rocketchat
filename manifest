@@ -1,0 +1,144 @@
+#!/bin/sh
+
+os=$(cat "$__global/explorer/os")
+if [ ! "$os" = "debian" ]
+then
+    echo "OS $os is currently not supported." >&2
+    exit 1
+fi
+os_version=$(cat "$__global/explorer/os_version")
+case "$os_version" in
+    8*)
+        :
+    ;;
+    *)
+        echo "Unsupported version $os_version of $os." >&2
+        exit 1
+    ;;
+esac
+
+rocketchat_dir="/$__object_id"
+if [ ! "$rocketchat_dir" ]
+then
+    echo "Missing rocketchat directory (object_id)." >&2
+    exit 1
+fi
+state=$(cat "$__object/parameter/state")
+exists=$(cat "$__object/explorer/exists")
+
+case "$state" in
+    present)
+        if [ "$exists" = "yes" ]
+        then
+           echo "${rocketchat_dir} already exists" >&2
+           exit 0
+        fi
+
+        keyid=$(cat "$__object/parameter/mongodb-key")
+        keyserver=$(cat "$__object/parameter/mongodb-keyserver")
+        __apt_key mongodbkey --keyid $keyid --keyserver $keyserver
+
+        mongodb_src_uri=$(cat "$__object/parameter/mongodb-src-uri")
+        mongodb_dist=$(cat "$__object/parameter/mongodb-dist")
+        __apt_source mongodb-org --uri ${mongodb_src_uri} \
+            --component main \
+            --distribution ${mongodb_dist}
+
+        nodejs_key_uri=$(cat "$__object/parameter/nodejs-key-uri")
+        __apt_key_uri nodejskey --uri ${nodejs_key_uri}
+
+        nodejs_src_uri=$(cat "$__object/parameter/nodejs-src-uri")
+        if [ ! "$nodejs_src_uri" ]
+        then
+            nodejs_version=$(cat "$__object/parameter/nodejs-version")
+            nodejs_src_uri="https://deb.nodesource.com/node_${nodejs_version}"
+        fi
+        __apt_source nodejs --uri ${nodejs_src_uri} \
+            --component main \
+            --include-src
+
+        require="__apt_key/mongodbkey __apt_source/mongodb-org __apt_key_uri/nodejskey __apt_source/nodejs" __apt_update_index
+		for package in curl graphicsmagick apt-transport-https build-essential nginx
+			do __package $package --state=present
+		done
+       
+        require="__apt_update_index" __package mongodb-org
+        require="__apt_update_index" __package nodejs
+        require="__package/mongodb-org" __start_on_boot mongod
+
+        require="__package/mongodb-org __package/nodejs" __directory "$rocketchat_dir"
+
+        port=$(cat "$__object/parameter/port")
+        admin_pass=$(cat "$__object/parameter/admin-pass")
+        admin_email=$(cat "$__object/parameter/admin-email")
+        hostname=$(cat "$__object/parameter/hostname")
+        if [ ! "$hostname" ]
+        then
+            hostname=$(cat "$__global/explorer/hostname")
+        fi
+        bindipparam="$__object/parameter/bindip"
+        if [ -f "$bindipparam" ]
+        then
+            bindip=$(cat "$bindipparam")
+            bindip_env="Environment=BIND_IP=$bindip"
+        else
+            bindip_env=""
+        fi
+        __file /etc/systemd/system/rocketchat.service --owner root \
+            --group root \
+            --mode 755 --source - << EOF
+[Unit]
+Description=Rocket.Chat Server
+After=syslog.target
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+StandardOutput=syslog
+SyslogIdentifier=RocketChat
+User=root
+Group=root
+Environment=MONGO_URL=mongodb://localhost:27017/rocketchat
+Environment=PORT=${port}
+Environment=ROOT_URL=https://${hostname}:${port}
+Environment=ADMIN_PASS=${admin_pass}
+Environment=ADMIN_EMAIL=${admin_email}
+${bindip_env}
+WorkingDirectory=${rocketchat_dir}
+ExecStart=/usr/bin/node ${rocketchat_dir}/main.js
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        __file /etc/nginx/sites-enabled/rocketchat --owner www-data \
+            --group www-data \
+            --mode 755 --source "$__type/files/rocketchat.nginx"
+		__ungleich_ssl_certificates
+        require="__file/etc/systemd/system/rocketchat.service" \
+            __start_on_boot rocketchat
+
+        __file /lib/systemd/system/mongod.service --owner root \
+            --group root --mode 755 --source "$__type/files/mongod.service"
+        require="__file/lib/systemd/system/mongod.service" \
+            __start_on_boot mongod
+    ;;
+    absent)
+        if [ "$exists" ]
+        then
+            __process mongod --state absent \
+                --stop "service mongod stop" \
+                --name ".*mongod .*"
+            __start_on_boot mongod --state absent
+            __process rocketchat --state absent \
+                --stop "service rocketchat stop" \
+                --name ".*node.*${rocketchat_dir}.*main.js.*"
+            __start_on_boot rocketchat --state absent
+            __file /etc/systemd/system/rocketchat.service --state absent
+            __directory "$rocketchat_dir" --state absent
+        fi
+    ;;
+    *)
+        echo "Unknown state: $state" >&2
+        exit 1
+esac

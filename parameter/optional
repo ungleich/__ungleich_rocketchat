@@ -1,0 +1,15 @@
+admin-email
+admin-pass
+hostname
+mongodb-key
+mongodb-keyserver
+mongodb-src-uri
+mongodb-dist
+nodejs-key-uri
+nodejs-src-uri
+nodejs-version
+port
+rocketchat-uri
+rocketchat-version
+state
+bindip
