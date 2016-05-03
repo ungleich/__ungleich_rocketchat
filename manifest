@@ -114,7 +114,6 @@ EOF
         require="__package/nginx" __file /etc/nginx/sites-enabled/rocketchat --owner www-data \
             --group www-data \
             --mode 755 --source "$__type/files/rocketchat.nginx"
-        __ungleich_ssl_certificates
         require="__file/etc/systemd/system/rocketchat.service" \
             __start_on_boot rocketchat
 
