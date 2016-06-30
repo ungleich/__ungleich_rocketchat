@@ -64,7 +64,6 @@ case "$state" in
        
         require="__apt_update_index" __package mongodb-org
         require="__apt_update_index" __package nodejs
-        require="__package/mongodb-org" __start_on_boot mongod
 
         require="__package/mongodb-org __package/nodejs" __directory "$rocketchat_dir"
 
@@ -119,7 +118,7 @@ EOF
 
         __file /lib/systemd/system/mongod.service --owner root \
             --group root --mode 755 --source "$__type/files/mongod.service"
-        require="__file/lib/systemd/system/mongod.service" \
+        require="__package/mongodb-org __file/lib/systemd/system/mongod.service" \
             __start_on_boot mongod
     ;;
     absent)
