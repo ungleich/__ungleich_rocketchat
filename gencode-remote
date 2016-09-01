@@ -17,7 +17,7 @@ case "$os_version" in
     ;;
 esac
 echo "rm -f /etc/nginx/sites-enabled/default"
-echo "service nginx reload"
+echo "service nginx reload || true"
 rocketchat_dir="/$__object_id"
 if [ ! "$rocketchat_dir" ]
 then
