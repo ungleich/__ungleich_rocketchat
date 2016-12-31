@@ -44,20 +44,23 @@ case "$state" in
             --component main \
             --distribution ${mongodb_dist}
 
-        nodejs_key_uri=$(cat "$__object/parameter/nodejs-key-uri")
-        __apt_key_uri nodejskey --uri ${nodejs_key_uri}
+        __docker_compose
 
-        nodejs_src_uri=$(cat "$__object/parameter/nodejs-src-uri")
-        if [ ! "$nodejs_src_uri" ]
-        then
-            nodejs_version=$(cat "$__object/parameter/nodejs-version")
-            nodejs_src_uri="https://deb.nodesource.com/node_${nodejs_version}"
-        fi
-        __apt_source nodejs --uri ${nodejs_src_uri} \
-            --component main \
-            --include-src
+#        nodejs_key_uri=$(cat "$__object/parameter/nodejs-key-uri")
+#        __apt_key_uri nodejskey --uri ${nodejs_key_uri}
+#
+#        nodejs_src_uri=$(cat "$__object/parameter/nodejs-src-uri")
+#        if [ ! "$nodejs_src_uri" ]
+#        then
+#            nodejs_version=$(cat "$__object/parameter/nodejs-version")
+#            nodejs_src_uri="https://deb.nodesource.com/node_${nodejs_version}"
+#        fi
+#        __apt_source nodejs --uri ${nodejs_src_uri} \
+#            --component main \
+#            --include-src
 
-        require="__apt_key/mongodbkey __apt_source/mongodb-org __apt_key_uri/nodejskey __apt_source/nodejs" __apt_update_index
+#        require="__apt_key/mongodbkey __apt_source/mongodb-org __apt_key_uri/nodejskey __apt_source/nodejs" __apt_update_index
+        require="__apt_key/mongodbkey __apt_source/mongodb-org" __apt_update_index
 		for package in curl graphicsmagick apt-transport-https build-essential nginx
 			do __package $package --state=present
 		done
@@ -68,8 +71,8 @@ case "$state" in
         require="__package/mongodb-org __package/nodejs" __directory "$rocketchat_dir"
 
         port=$(cat "$__object/parameter/port")
-        admin_pass=$(cat "$__object/parameter/admin-pass")
-        admin_email=$(cat "$__object/parameter/admin-email")
+#        admin_pass=$(cat "$__object/parameter/admin-pass")
+#        admin_email=$(cat "$__object/parameter/admin-email")
         hostname=$(cat "$__object/parameter/hostname")
         if [ ! "$hostname" ]
         then
@@ -98,18 +101,68 @@ StandardOutput=syslog
 SyslogIdentifier=RocketChat
 User=root
 Group=root
-Environment=MONGO_URL=mongodb://localhost:27017/rocketchat
-Environment=PORT=${port}
-Environment=ROOT_URL=https://${hostname}:${port}
-Environment=ADMIN_PASS=${admin_pass}
-Environment=ADMIN_EMAIL=${admin_email}
 ${bindip_env}
 WorkingDirectory=${rocketchat_dir}
-ExecStart=/usr/bin/node ${rocketchat_dir}/main.js
+ExecStart=/usr/local/bin/docker-compose -f ${rocketchat_dir}/docker-compose.yml up rocketchat
+ExecStop=/usr/local/bin/docker-compose -f ${rocketchat_dir}/docker-compose.yml stop rocketchat
 
 [Install]
 WantedBy=multi-user.target
 EOF
+
+        require="__directory/${rocketchat_dir}" __file ${rocketchat_dir}/docker-compose.yml --owner root \
+            --group root \
+            --mode 755 --source - << EOF
+rocketchat:
+  image: rocketchat/rocket.chat
+  volumes:
+    - ./uploads:/app/uploads
+  environment:
+    - PORT=3000
+    - ROOT_URL=https://${hostname}:${port}
+    - MONGO_URL=mongodb://localhost:27017/rocketchat
+#    - MONGO_OPLOG_URL=mongodb://localhost:27017/local
+    - MAIL_URL=smtp://smtp.email
+    #- HTTP_PROXY=http://proxy.domain.com
+    #- HTTPS_PROXY=http://proxy.domain.com
+  net: "host"
+  ports:
+    - 3000:3000
+  labels:
+    - "traefik.backend=rocketchat"
+    - "traefik.frontend.rule=Host: your.domain.tld"
+
+## hubot, the popular chatbot (add the bot user first and change the password before starting this image)
+#hubot:
+#  image: rocketchat/hubot-rocketchat:latest
+#  environment:
+#    - ROCKETCHAT_URL=rocketchat:3000
+#    - ROCKETCHAT_ROOM=GENERAL
+#    - ROCKETCHAT_USER=bot
+#    - ROCKETCHAT_PASSWORD=botpassword
+#    - BOT_NAME=bot
+## you can add more scripts as you'd like here, they need to be installable by npm
+#    - EXTERNAL_SCRIPTS=hubot-help,hubot-seen,hubot-links,hubot-diagnostics
+#  links:
+#    - rocketchat:rocketchat
+#  labels:
+#    - "traefik.enable=false"
+#  volumes:
+#    - ./scripts:/home/hubot/scripts
+## this is used to expose the hubot port for notifications on the host on port 3001, e.g. for hubot-jenkins-notifier
+#  ports:
+#    - 3001:8080
+#
+#traefik:
+#  image: traefik:latest
+#  command: traefik --docker --acme=true --acme.domains='your.domain.tld' --acme.email='your@email.tld' --acme.entrypoint=https --acme.storagefile=acme.json --defaultentrypoints=http --defaultentrypoints=https --entryPoints='Name:http Address::80 Redirect.EntryPoint:https' --entryPoints='Name:https Address::443 TLS.Certificates:'
+#  ports:
+#    - 80:80
+#    - 443:443
+#  volumes:
+#    - /var/run/docker.sock:/var/run/docker.sock
+EOF
+
         require="__package/nginx" __file /etc/nginx/sites-enabled/rocketchat --owner www-data \
             --group www-data \
             --mode 755 --source "$__type/files/rocketchat.nginx" \
@@ -135,6 +188,8 @@ EOF
             __start_on_boot rocketchat --state absent
             __file /etc/systemd/system/rocketchat.service --state absent
             __directory "$rocketchat_dir" --state absent
+            __docker_compose --state absent
+            __docker --state absent
         fi
     ;;
     *)

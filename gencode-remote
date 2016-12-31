@@ -31,23 +31,24 @@ case "$state" in
     present)
         [ "$exists" = "yes" ] && exit 0
 
-        rocketchat_uri=$(cat "$__object/parameter/rocketchat-uri")
-        if [ ! "$rocketchat_uri" ]
-        then
-            rocketchat_version=$(cat "$__object/parameter/rocketchat-version")
-            rocketchat_uri="https://rocket.chat/releases/${rocketchat-version}/download"
-        fi
+#        rocketchat_uri=$(cat "$__object/parameter/rocketchat-uri")
+#        if [ ! "$rocketchat_uri" ]
+#        then
+#            rocketchat_version=$(cat "$__object/parameter/rocketchat-version")
+#            rocketchat_uri="https://rocket.chat/releases/${rocketchat-version}/download"
+#        fi
         cat <<eof
 service mongod start
-curl -s -L ${rocketchat_uri} -o ${rocketchat_dir}/rocket.chat.tar.gz
-tar -x -z -C ${rocketchat_dir} -f ${rocketchat_dir}/rocket.chat.tar.gz
-rm ${rocketchat_dir}/rocket.chat.tar.gz
-cp -R -p ${rocketchat_dir}/bundle/* ${rocketchat_dir}
-cp -R -p ${rocketchat_dir}/bundle/.* ${rocketchat_dir} || true
-rm -r ${rocketchat_dir}/bundle
-cd ${rocketchat_dir}/programs/server
-npm install
-cd \$OLD_PWD
+docker-compose -f ${rocketchat_dir}/docker-compose.yml pull
+#curl -s -L ${rocketchat_uri} -o ${rocketchat_dir}/rocket.chat.tar.gz
+#tar -x -z -C ${rocketchat_dir} -f ${rocketchat_dir}/rocket.chat.tar.gz
+#rm ${rocketchat_dir}/rocket.chat.tar.gz
+#cp -R -p ${rocketchat_dir}/bundle/* ${rocketchat_dir}
+#cp -R -p ${rocketchat_dir}/bundle/.* ${rocketchat_dir} || true
+#rm -r ${rocketchat_dir}/bundle
+#cd ${rocketchat_dir}/programs/server
+#npm install
+#cd \$OLD_PWD
 service rocketchat start
 eof
     ;;
