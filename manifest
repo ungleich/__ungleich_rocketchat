@@ -66,9 +66,9 @@ case "$state" in
 		done
        
         require="__apt_update_index" __package mongodb-org
-        require="__apt_update_index" __package nodejs
+#        require="__apt_update_index" __package nodejs
 
-        require="__package/mongodb-org __package/nodejs" __directory "$rocketchat_dir"
+        require="__package/mongodb-org" __directory "$rocketchat_dir"
 
         port=$(cat "$__object/parameter/port")
 #        admin_pass=$(cat "$__object/parameter/admin-pass")

@@ -1,5 +1,6 @@
 server {
   listen 80;
+  listen [::]:80;
   server_name chat.ungleich.ch;
 
   return 301 https://$host$request_uri;
@@ -7,7 +8,9 @@ server {
 
 server {
     listen 443;
+    listen [::]:443;
     server_name chat.ungleich.ch;
+
     error_log /var/log/nginx/rocketchat.error.log;
 
 
